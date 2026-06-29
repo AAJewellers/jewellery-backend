@@ -64,14 +64,13 @@ router.post('/create-label', async (req, res) => {
 
         console.log('📤 Sending to Delhivery API...');
         console.log('📤 Payload:', JSON.stringify(payload, null, 2));
-
-        const response = await axios.post(
-            `${DELHIVERY_API_URL}/api/cmu/create.json`,
-            payload,  
+const response = await axios.post(
+    `${DELHIVERY_API_URL}/api/cmu/create.json?format=json`, // ✅ URL এ format যোগ করুন
+    payload,  // ✅ সরাসরি payload, postData নয়
             {
                 headers: {
                     'Authorization': `Token ${DELHIVERY_API_KEY}`,
-                    'Content-Type': 'application/json' 
+                    'Content-Type': 'application/json'  // ✅ JSON
                 },
                 timeout: 30000
             }
