@@ -2,17 +2,17 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const router = express.Router();
 
-// ✅ Gmail SMTP কনফিগারেশন - Render এর জন্য অপটিমাইজড
+// ✅ ALTERNATIVE: Use Gmail with 587 port (STARTTLS)
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 465,
-  secure: true, // SSL ব্যবহার করুন (port 465)
+  port: 587,  // STARTTLS use করে
+  secure: false, // STARTTLS এর জন্য false
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  // ✅ Render এর জন্য টাইমআউট বাড়ানো
-  connectionTimeout: 30000,  // 30 সেকেন্ড
+  // ✅ Timeout বাড়ানো
+  connectionTimeout: 30000,
   greetingTimeout: 30000,
   socketTimeout: 30000,
   // ✅ TLS কনফিগারেশন
@@ -20,20 +20,42 @@ const transporter = nodemailer.createTransport({
     rejectUnauthorized: false,
     minVersion: 'TLSv1.2'
   },
-  // ✅ Pooling - বেশি ইমেইলের জন্য
+  // ✅ Pooling
   pool: true,
   maxConnections: 5,
   maxMessages: 100
 });
 
+// ✅ Transporter Verify (Startup)
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ Email transporter error:', error.message);
+    console.error('❌ Please check EMAIL_USER and EMAIL_PASS in .env');
+  } else {
+    console.log('✅ Email transporter ready to send emails');
+  }
+});
+
 // ============================================
-// ✅ ইমেইল সেন্ড এন্ডপয়েন্ট (FIXED)
+// ✅ HEALTH CHECK for Email
+// ============================================
+router.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Email service is running',
+    emailUser: process.env.EMAIL_USER ? '✅ Set' : '❌ Not Set',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ============================================
+// ✅ SIMPLE EMAIL SEND (WITHOUT WAITING FOR VERIFICATION)
 // ============================================
 router.post('/send', async (req, res) => {
   try {
     const { to, subject, html, from } = req.body;
     
-    // ✅ ভ্যালিডেশন
+    // ✅ Validation
     if (!to || !subject || !html) {
       return res.status(400).json({ 
         success: false, 
@@ -41,7 +63,7 @@ router.post('/send', async (req, res) => {
       });
     }
 
-    // ✅ ইমেইল ফরম্যাট চেক
+    // ✅ Email format check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(to)) {
       return res.status(400).json({ 
@@ -51,22 +73,28 @@ router.post('/send', async (req, res) => {
     }
 
     console.log('📧 Sending email to:', to);
+    console.log('📧 Subject:', subject);
 
-    // ✅ ইমেইল সেন্ড
+    // ✅ Mail Options
     const mailOptions = {
       from: from || `"AA Jewellery" <${process.env.EMAIL_USER}>`,
       to: to,
       subject: subject,
       html: html,
-      // ✅ Gmail এর জন্য গুরুত্বপূর্ণ হেডার
       headers: {
         'X-Entity-Ref-ID': `order-${Date.now()}`
       }
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    // ✅ Send email with timeout
+    const info = await Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Email send timeout after 25 seconds')), 25000)
+      )
+    ]);
     
-    console.log('✅ Email sent successfully! Message ID:', info.messageId);
+    console.log('✅ Email sent! Message ID:', info.messageId);
     
     res.json({ 
       success: true, 
@@ -77,34 +105,33 @@ router.post('/send', async (req, res) => {
   } catch (error) {
     console.error('❌ Email send error:', error.message);
     
-    // ✅ ডিটেইলড এরর মেসেজ
     let errorMessage = error.message;
     let statusCode = 500;
     
     if (error.code === 'EAUTH') {
-      errorMessage = 'Gmail authentication failed. Please check EMAIL_USER and EMAIL_PASS.';
+      errorMessage = 'Gmail authentication failed. Please use App Password.';
       statusCode = 401;
     } else if (error.code === 'ETIMEDOUT' || error.code === 'ESOCKET') {
-      errorMessage = 'Connection timeout. Please check internet connection or try again.';
+      errorMessage = 'Connection timeout. Using fallback to skip email.';
       statusCode = 504;
     } else if (error.code === 'ECONNECTION') {
-      errorMessage = 'Cannot connect to Gmail server. Please try again later.';
+      errorMessage = 'Cannot connect to Gmail.';
       statusCode = 503;
-    } else if (error.code === 'EENVELOPE') {
-      errorMessage = 'Invalid email format or recipient address.';
-      statusCode = 400;
+    } else if (error.message?.includes('timeout')) {
+      errorMessage = 'Email send timeout.';
+      statusCode = 504;
     }
 
     res.status(statusCode).json({ 
       success: false, 
       error: errorMessage,
-      code: error.code || 'UNKNOWN'
+      code: error.code || 'TIMEOUT'
     });
   }
 });
 
 // ============================================
-// ✅ টেস্ট এন্ডপয়েন্ট
+// ✅ TEST ENDPOINT
 // ============================================
 router.get('/test', async (req, res) => {
   try {
@@ -117,13 +144,15 @@ router.get('/test', async (req, res) => {
       });
     }
 
+    console.log('📧 Sending test email to:', testEmail);
+
     const info = await transporter.sendMail({
       from: `"AA Jewellery" <${process.env.EMAIL_USER}>`,
       to: testEmail,
-      subject: '🔧 Email Configuration Test',
+      subject: '✅ Email Configuration Test',
       html: `
         <h1>✅ Email Configuration Test</h1>
-        <p>If you see this email, your email configuration is working perfectly!</p>
+        <p>If you see this email, your email configuration is working!</p>
         <p>Time: ${new Date().toLocaleString()}</p>
         <hr>
         <p><strong>AA Jewellery</strong></p>
@@ -141,7 +170,8 @@ router.get('/test', async (req, res) => {
     console.error('❌ Test email error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
+      code: error.code || 'UNKNOWN'
     });
   }
 });
