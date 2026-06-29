@@ -8,7 +8,23 @@ dotenv.config();
 
 // Initialize Firebase Admin
 const admin = require('firebase-admin');
-const serviceAccount = require('./serviceAccountKey.json');
+
+// ✅ Render-এ Environment Variable থেকে Service Account JSON পড়ুন
+let serviceAccount;
+try {
+  // প্রথমে Environment Variable চেক করুন
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    console.log('✅ Firebase Service Account loaded from Environment Variable');
+  } else {
+    // লোকাল ডেভেলপমেন্টের জন্য ফাইল থেকে পড়ুন
+    serviceAccount = require('./serviceAccountKey.json');
+    console.log('✅ Firebase Service Account loaded from file');
+  }
+} catch (error) {
+  console.error('❌ Failed to load Firebase Service Account:', error.message);
+  process.exit(1);
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -27,7 +43,8 @@ const corsOptions = {
     'http://localhost:5173',
     'https://localhost:3000',
     'https://aa-jewellery.web.app',
-    'https://aa-jewellery.firebaseapp.com'
+    'https://aa-jewellery.firebaseapp.com',
+    process.env.FRONTEND_URL || 'https://jewellery-frontend.vercel.app'
   ],
   credentials: true,
   optionsSuccessStatus: 200,
