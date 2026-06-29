@@ -12,12 +12,10 @@ const admin = require('firebase-admin');
 // ✅ Render-এ Environment Variable থেকে Service Account JSON পড়ুন
 let serviceAccount;
 try {
-  // প্রথমে Environment Variable চেক করুন
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     console.log('✅ Firebase Service Account loaded from Environment Variable');
   } else {
-    // লোকাল ডেভেলপমেন্টের জন্য ফাইল থেকে পড়ুন
     serviceAccount = require('./serviceAccountKey.json');
     console.log('✅ Firebase Service Account loaded from file');
   }
@@ -58,6 +56,27 @@ app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+app.use((req, res, next) => {
+  // ✅ 30 সেকেন্ড টাইমআউট
+  req.setTimeout(30000, () => {
+    console.error('⏰ Request timeout:', req.method, req.url);
+    if (!res.headersSent) {
+      res.status(504).json({
+        success: false,
+        error: 'Gateway Timeout'
+      });
+    }
+  });
+  next();
+});
+
+// ✅ Email route এর আগে এই মিডলওয়্যার যোগ করুন
+app.use('/api/email', (req, res, next) => {
+  // Email route এর জন্য আলাদা timeout
+  req.setTimeout(10000);
+  next();
+}, emailRoutes);
+ 
 // Routes
 const shippingRoutes = require('./routes/shipping');
 const paymentRoutes = require('./routes/payment');
