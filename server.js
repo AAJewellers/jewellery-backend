@@ -56,8 +56,8 @@ app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// ⭐ GLOBAL TIMEOUT MIDDLEWARE
 app.use((req, res, next) => {
-  // ✅ 30 সেকেন্ড টাইমআউট
   req.setTimeout(30000, () => {
     console.error('⏰ Request timeout:', req.method, req.url);
     if (!res.headersSent) {
@@ -70,25 +70,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ Email route এর আগে এই মিডলওয়্যার যোগ করুন
-app.use('/api/email', (req, res, next) => {
-  // Email route এর জন্য আলাদা timeout
-  req.setTimeout(10000);
-  next();
-}, emailRoutes);
- 
-// Routes
+// ============================================
+// ✅ ROUTES - সঠিক অর্ডারে import করুন
+// ============================================
 const shippingRoutes = require('./routes/shipping');
 const paymentRoutes = require('./routes/payment');
 const webhookRoutes = require('./routes/webhook');
 const returnRoutes = require('./routes/returnAPI');
-const emailRoutes = require('./routes/email');
+const emailRoutes = require('./routes/email'); // ✅ আগে import করুন
 
+// ============================================
+// ✅ USE ROUTES
+// ============================================
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/returns', returnRoutes);
-app.use('/api/email', emailRoutes);
+app.use('/api/email', emailRoutes); // ✅ এখন ব্যবহার করুন
 
 // Health Check
 app.get('/health', (req, res) => {
