@@ -1,4 +1,4 @@
-// routes/email.js - HTML Support সহ
+// routes/email.js
 const express = require('express');
 const nodemailer = require('nodemailer');
 const router = express.Router();
@@ -30,10 +30,12 @@ transporter.verify((error, success) => {
 router.post('/send', async (req, res) => {
   const { to, subject, html, from } = req.body;
   
+  // ✅ Validation
   if (!to || !subject || !html) {
+    console.error('❌ Missing fields:', { to: !!to, subject: !!subject, html: !!html });
     return res.status(400).json({ 
       success: false, 
-      error: 'Missing required fields' 
+      error: 'Missing required fields: to, subject, or html' 
     });
   }
 
@@ -41,15 +43,16 @@ router.post('/send', async (req, res) => {
   console.log('  To:', to);
   console.log('  Subject:', subject);
   console.log('  HTML Length:', html.length);
+  console.log('  HTML Preview:', html.substring(0, 200) + '...');
 
-  // ✅ Immediate Response
+  // ✅ Immediate Response (200 OK)
   res.status(200).json({ 
     success: true, 
     message: 'HTML email accepted for delivery',
     queued: true
   });
 
-  // ✅ Background Send (HTML Email)
+  // ✅ Background Send (Fire and Forget)
   setTimeout(async () => {
     try {
       const mailOptions = {
@@ -59,7 +62,7 @@ router.post('/send', async (req, res) => {
         html: html  // ✅ Full HTML Template
       };
 
-      console.log('📤 Sending HTML email...');
+      console.log('📤 Sending HTML email in background...');
       const info = await transporter.sendMail(mailOptions);
       console.log('✅ HTML Email sent successfully!');
       console.log('  Message ID:', info.messageId);
@@ -70,39 +73,6 @@ router.post('/send', async (req, res) => {
       console.error('  To:', to);
       console.error('  Error:', error.message);
       console.error('  Code:', error.code || 'UNKNOWN');
-    }
-  }, 1000);
-});
-
-// ============================================
-// ✅ Send Plain Text Email
-// ============================================
-router.post('/send-text', async (req, res) => {
-  const { to, subject, text, from } = req.body;
-  
-  if (!to || !subject || !text) {
-    return res.status(400).json({ 
-      success: false, 
-      error: 'Missing required fields' 
-    });
-  }
-
-  res.status(200).json({ 
-    success: true, 
-    message: 'Text email accepted'
-  });
-
-  setTimeout(async () => {
-    try {
-      await transporter.sendMail({
-        from: from || `"AA Jewellery" <${process.env.EMAIL_USER}>`,
-        to: to,
-        subject: subject,
-        text: text
-      });
-      console.log('✅ Text email sent to:', to);
-    } catch (error) {
-      console.error('❌ Text email failed:', error.message);
     }
   }, 1000);
 });
@@ -121,7 +91,7 @@ router.get('/health', (req, res) => {
 });
 
 // ============================================
-// ✅ Test Email
+// ✅ Test Email (HTML)
 // ============================================
 router.get('/test', async (req, res) => {
   try {
@@ -134,6 +104,8 @@ router.get('/test', async (req, res) => {
       });
     }
 
+    console.log('📧 Sending test HTML email to:', testEmail);
+
     const htmlTemplate = `
       <!DOCTYPE html>
       <html>
@@ -143,7 +115,7 @@ router.get('/test', async (req, res) => {
           .header { background: linear-gradient(135deg, #ec4899, #8b5cf6); padding: 20px; color: white; text-align: center; border-radius: 10px; }
           .content { padding: 20px; background: #f9fafb; border-radius: 10px; margin-top: 20px; }
           .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; }
-          .btn { background: #ec4899; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; }
+          .btn { background: #ec4899; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block; }
         </style>
       </head>
       <body>
@@ -156,7 +128,7 @@ router.get('/test', async (req, res) => {
           <p>This is a <strong>test email</strong> with full HTML formatting.</p>
           <p>Time: ${new Date().toLocaleString()}</p>
           <p style="margin-top: 20px;">
-            <a href="#" class="btn">Visit Our Store</a>
+            <a href="https://aa-jewellery.web.app" class="btn">Visit Our Store</a>
           </p>
         </div>
         <div class="footer">
@@ -169,7 +141,7 @@ router.get('/test', async (req, res) => {
     const info = await transporter.sendMail({
       from: `"AA Jewellery" <${process.env.EMAIL_USER}>`,
       to: testEmail,
-      subject: '✅ HTML Email Test',
+      subject: '✅ HTML Test Email',
       html: htmlTemplate
     });
 
